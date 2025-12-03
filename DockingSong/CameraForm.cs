@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,6 +18,15 @@ namespace DockingSong
         public CameraForm()
         {
             InitializeComponent();
+        }
+
+        // 이미지 Open하면, PictureBox에 로드한 이미지 띄우기
+        public void LoadImage(string filePath)
+        {
+            if (File.Exists(filePath) == false) return;
+
+            Image bitmap = Image.FromFile(filePath);
+            imageViewer.LoadBitmap((Bitmap)bitmap);
         }
     }
 }

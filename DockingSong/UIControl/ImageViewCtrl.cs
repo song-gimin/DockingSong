@@ -1,0 +1,160 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace DockingSong.UIControl
+{
+    public partial class ImageViewCtrl : UserControl
+    {
+        private bool _isInitialized = false;
+
+        // 현재 로드된 이미지
+        private Bitmap _bitmapImage = null;
+
+        // 더블 버퍼링을 위한 캔버스  cf.더블버퍼링 : 화면 깜빡임을 방지하고 부드러운 펜더링위해 사용
+        private Bitmap Canvas = null;
+
+        // 화면에 표시될 이미지의 크기 및 위치 (줌 인/아웃 할때 보이는거)
+        private RectangleF ImageRect = new RectangleF(0, 0, 0, 0); //부동 소수점(float) 좌표를 사용하는 사각형 구조체
+
+        private float _curZoom = 1.0f;  //현재 줌 배율
+        private float _zoomFactor = 1.1f;  //줌 배율 변경 시, 확대/축소 단위
+
+        private float MinZoom = 1.0f;  //최소 줌 제한 값
+        private float MaxZoom = 100.0f;  //최대 줌 제한 값
+
+        public ImageViewCtrl()
+        {
+            InitializeComponent();
+            IntilalizeCanvas();
+        }
+
+        // 캔버스 초기화 및 설정
+        private void IntilalizeCanvas()
+        {
+            ResizeCanvas();  // 캔버스를 UserControl 크기만큼 생성
+            
+            DoubleBuffered = true;  // 화면 깜빡임을 방지하기 위한 더블 버퍼링 설정
+        }
+
+        private void ResizeCanvas()
+        {
+            if (Width <= 0 || Height <= 0 || _bitmapImage == null) return;
+
+            //캔버스를 UserControl 크기만큼 생성
+            Canvas = new Bitmap(Width, Height);
+            if (Canvas == null) return;
+
+            //이미지 원본 크기 기준으로 확대/축소 (ZoomFactor 유지)
+            float virtualWidth = _bitmapImage.Width * _curZoom;
+            float virtualHeight = _bitmapImage.Height * _curZoom;
+
+            //이미지가 UserControl
+            float offsetX = virtualWidth < Width ? (Width - virtualWidth) / 2f : 0f;
+            float offsetY = virtualHeight < Height ? (Height - virtualHeight) / 2f : 0f;
+
+            ImageRect = new RectangleF(offsetX, offsetY, virtualWidth, virtualHeight); // 화면 사이즈가 바뀔때마다 재계산
+        }
+
+        private void FitImageToScreen()
+        {
+            RecalcZoomRatio();
+
+            float NewWidth = _bitmapImage.Width * _curZoom;
+            float NewHeight = _bitmapImage.Height * _curZoom;
+
+            // 이미지가 UserControl 중앙에 배치되도록 정렬
+            // UserControl 너비에서 이미지 너비를 뺀 후, 절반을 왼쪽 여백으로 설정하여 중앙 정렬
+            ImageRect = new RectangleF((Width - NewWidth) / 2, (Height - NewHeight) / 2, NewWidth, NewHeight);
+
+            Invalidate(); // 화면 갱신
+        }
+
+        // 현재 이미지를 기준으로 줌 비율 재계산
+        private void RecalcZoomRatio()
+        {
+            if (_bitmapImage == null || Width <= 0 || Height <= 0) return;
+
+            Size imageSize = new Size(_bitmapImage.Width, _bitmapImage.Height);
+
+            float aspectRatio = (float)imageSize.Height / imageSize.Width;
+            float clientAspect = (float)Height / (float)Width;
+
+            float ratio;
+            if (aspectRatio <= clientAspect)
+            {
+                ratio = (float)Width / (float)imageSize.Width;
+            }
+            else
+            {
+                ratio = (float)Height / (float)imageSize.Height;
+            }
+
+            float minZoom = ratio;
+
+            MinZoom = minZoom;
+
+            _curZoom = Math.Max(MinZoom, Math.Min(MaxZoom, ratio));
+        }
+
+        // 이미지 로딩
+        public void LoadBitmap(Bitmap bitmap)
+        {
+            // 기존에 로드된 이미지가 있다면 해제 후 초기화, 메모리누수 방지
+            if (_bitmapImage != null)
+            {
+                // 이미지 크기가 같다면, 이미지 변경 후, 화면 갱신
+                if (_bitmapImage.Width == bitmap.Width && _bitmapImage.Height == bitmap.Height)
+                {
+                    _bitmapImage = bitmap;
+                    Invalidate();
+                    return;
+                }
+
+                _bitmapImage.Dispose(); // Bitmap 객체가 사용하던 메모리 리소스를 해제
+                _bitmapImage = null;  // 객체를 해제하여 가비지 컬렉션(GC)이 수집할 수 있도록 설정
+            }
+
+            // 새로운 이미지 로드
+            _bitmapImage = bitmap;
+
+            // bitmap==null 예외처리도 초기화되지않은 변수들 초기화
+            if (_isInitialized == false)
+            {
+                _isInitialized = true;
+                ResizeCanvas();
+            }
+
+            FitImageToScreen();
+        }
+
+        // Windows Forms에서 컨트롤이 다시 그려질 때 자동으로 호출되는 메서드 : 화면새로고침(Invalidate()), 창 크기변경, 컨트롤이 숨겨졌다가 나타날때 실행
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            if (_bitmapImage != null && Canvas != null)
+            {
+                // 캔버스 초기화 후, 이미지 그리기
+                using (Graphics g = Graphics.FromImage(Canvas))
+                {
+                    g.Clear(Color.Transparent); // 배경 투명하게
+
+                    // 이미지 확대or축소때 화질 최적화 방식(Interpolation Mode)                 
+                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    g.DrawImage(_bitmapImage, ImageRect);
+
+                    // 캔버스를 UserControl 화면에 표시
+                    e.Graphics.DrawImage(Canvas, 0, 0);
+                }
+            }
+        }
+    }
+}
