@@ -20,6 +20,9 @@ namespace DockingSong
         {
             InitializeComponent();
 
+            //_dockPanel = new DockPanel();
+            //_dockPanel.Dock = DockStyle.Fill;  // 아래처럼 한번에 하는게 가독성이 더 좋고, _dockPanel 변수 한번만 써도 되고, 더 추가하기도 좋음
+
             _dockPanel = new DockPanel()
             {
                 Dock = DockStyle.Fill
