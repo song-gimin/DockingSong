@@ -34,6 +34,8 @@ namespace DockingSong.UIControl
         {
             InitializeComponent();
             IntilalizeCanvas();
+
+            MouseWheel += new MouseEventHandler(ImageViewCCtrl_MouseWheel);
         }
 
         // 캔버스 초기화 및 설정
@@ -74,6 +76,7 @@ namespace DockingSong.UIControl
             // UserControl 너비에서 이미지 너비를 뺀 후, 절반을 왼쪽 여백으로 설정하여 중앙 정렬
             ImageRect = new RectangleF((Width - NewWidth) / 2, (Height - NewHeight) / 2, NewWidth, NewHeight);
 
+            ResizeCanvas();
             Invalidate(); // 화면 갱신
         }
 
@@ -155,6 +158,74 @@ namespace DockingSong.UIControl
                     e.Graphics.DrawImage(Canvas, 0, 0);
                 }
             }
+        }
+
+        private void ImageViewCtrl_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            FitImageToScreen();
+        }
+        private void ImageViewCtrl_Resize(object sender, EventArgs e)
+        {
+            ResizeCanvas();
+            Invalidate();
+        }
+
+        // 마우스 휠 이벤트
+        private void ImageViewCCtrl_MouseWheel(object sender, MouseEventArgs e)
+        {
+            if (e.Delta < 0)
+            {
+                ZoomMove(_curZoom / _zoomFactor, e.Location);
+            }
+            else
+            {
+                ZoomMove(_curZoom * _zoomFactor, e.Location);
+            }
+            // 새로운 이미지 위치 반영 (점진적으로 초기 상태로 회귀)
+            if (_bitmapImage != null)
+            {
+                ImageRect.Width = _bitmapImage.Width * _curZoom;
+                ImageRect.Height = _bitmapImage.Height * _curZoom;
+            }
+
+            Invalidate();  // 다시 그리기 요청
+        }
+
+        // ZoomMove : 휠에 의해, Zoom 확대/축소 값 계산
+        private void ZoomMove(float zoom, Point zoomOrigin)
+        {
+            PointF virtualOrigin = ScreenToVirtual(new PointF(zoomOrigin.X, zoomOrigin.Y));
+
+            _curZoom = Math.Max(MinZoom, Math.Min(MaxZoom, zoom));
+            if (_curZoom <= MinZoom) return;
+
+            PointF zoomedOrigin = VirtualToScreen(virtualOrigin);
+
+            float dx = zoomedOrigin.X - zoomOrigin.X;
+            float dy = zoomedOrigin.Y - zoomOrigin.Y;
+
+            ImageRect.X -= dx;
+            ImageRect.Y -= dy;
+        }
+
+        // ScreenToVirtual, GetScreenOffset : Virtual <-> Screen 좌표계 변환
+        private PointF ScreenToVirtual(PointF screenPos)
+        {
+            PointF offset = GetScreenOffset();
+            return new PointF(
+                (screenPos.X - offset.X) / _curZoom,
+                (screenPos.Y - offset.Y) / _curZoom);
+        }
+        private PointF GetScreenOffset()
+        {
+            return new PointF(ImageRect.X, ImageRect.Y);
+        }
+        private PointF VirtualToScreen(PointF virtualPos)
+        {
+            PointF offset = GetScreenOffset();
+            return new PointF(
+                virtualPos.X * _curZoom + offset.X,
+                virtualPos.Y * _curZoom + offset.Y);
         }
     }
 }
